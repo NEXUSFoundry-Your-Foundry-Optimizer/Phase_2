@@ -182,7 +182,11 @@ def get_quality_twin_model():
             from backend.src.twins.quality_twin import QualityTwin
             _quality_twin_singleton = QualityTwin()
         except Exception as e:
-            logger.warning("Failed to initialize QualityTwin ResNet model: %s", e)
+            try:
+                from src.twins.quality_twin import QualityTwin
+                _quality_twin_singleton = QualityTwin()
+            except Exception as e2:
+                logger.warning("Failed to initialize QualityTwin ResNet model: %s / %s", e, e2)
     return _quality_twin_singleton
 
 @app.post("/api/quality/inspect")
@@ -215,6 +219,26 @@ async def inspect_casting(
             "raw_score": 0.02,
             "image_path": temp_path
         }
+
+    # Broadcast update so UI graph and telemetry reflect the uploaded image inspection
+    try:
+        raw_score = float(result.get("raw_score", 0.02))
+        confidence = float(result.get("confidence", 98.0))
+        defect_flag = bool(result.get("defect_present", False))
+        state_update = {
+            "batch_id": batch_id,
+            "defect_present": defect_flag,
+            "defect_type": str(result.get("defect_type", "none")),
+            "inspection_result": "FAIL" if defect_flag else "PASS",
+            "confidence": confidence,
+            "defect_risk": round(raw_score, 3),
+            "quality_score": round(max(0.0, 1.0 - raw_score), 3),
+        }
+        await quality_twin.process_event(state_update)
+        await ws_manager.broadcast_digital_twin_update(batch_id, quality_twin.get_state(), twin="quality")
+    except Exception as sync_err:
+        logger.warning("Could not sync quality twin state after inspection: %s", sync_err)
+
     return result
 
 @app.post("/api/quality/inspect-json")

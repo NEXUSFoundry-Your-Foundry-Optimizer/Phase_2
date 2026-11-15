@@ -17,7 +17,6 @@ import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as AgentIndexRouteImport } from './routes/agent.index'
 import { Route as AgentPinnRouteImport } from './routes/agent.pinn'
-import { Route as AgentRagRouteImport } from './routes/agent.rag'
 import { Route as TwinsTwinRouteImport } from './routes/twins.$twin'
 
 const IndexRoute = IndexRouteImport.update({
@@ -60,11 +59,6 @@ const AgentPinnRoute = AgentPinnRouteImport.update({
   path: '/agent/pinn',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AgentRagRoute = AgentRagRouteImport.update({
-  id: '/agent/rag',
-  path: '/agent/rag',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TwinsTwinRoute = TwinsTwinRouteImport.update({
   id: '/twins/$twin',
   path: '/twins/$twin',
@@ -79,7 +73,6 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRoute
   '/profile': typeof ProfileRoute
   '/agent/pinn': typeof AgentPinnRoute
-  '/agent/rag': typeof AgentRagRoute
   '/twins/$twin': typeof TwinsTwinRoute
   '/agent/': typeof AgentIndexRoute
 }
@@ -91,7 +84,6 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRoute
   '/profile': typeof ProfileRoute
   '/agent/pinn': typeof AgentPinnRoute
-  '/agent/rag': typeof AgentRagRoute
   '/twins/$twin': typeof TwinsTwinRoute
   '/agent': typeof AgentIndexRoute
 }
@@ -104,7 +96,6 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRoute
   '/profile': typeof ProfileRoute
   '/agent/pinn': typeof AgentPinnRoute
-  '/agent/rag': typeof AgentRagRoute
   '/twins/$twin': typeof TwinsTwinRoute
   '/agent/': typeof AgentIndexRoute
 }
@@ -118,7 +109,6 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/agent/pinn'
-    | '/agent/rag'
     | '/twins/$twin'
     | '/agent/'
   fileRoutesByTo: FileRoutesByTo
@@ -130,7 +120,6 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/agent/pinn'
-    | '/agent/rag'
     | '/twins/$twin'
     | '/agent'
   id:
@@ -142,7 +131,6 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/agent/pinn'
-    | '/agent/rag'
     | '/twins/$twin'
     | '/agent/'
   fileRoutesById: FileRoutesById
@@ -155,7 +143,6 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRoute
   ProfileRoute: typeof ProfileRoute
   AgentPinnRoute: typeof AgentPinnRoute
-  AgentRagRoute: typeof AgentRagRoute
   TwinsTwinRoute: typeof TwinsTwinRoute
   AgentIndexRoute: typeof AgentIndexRoute
 }
@@ -218,13 +205,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentPinnRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agent/rag': {
-      id: '/agent/rag'
-      path: '/agent/rag'
-      fullPath: '/agent/rag'
-      preLoaderRoute: typeof AgentRagRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/twins/$twin': {
       id: '/twins/$twin'
       path: '/twins/$twin'
@@ -243,7 +223,6 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRoute,
   ProfileRoute: ProfileRoute,
   AgentPinnRoute: AgentPinnRoute,
-  AgentRagRoute: AgentRagRoute,
   TwinsTwinRoute: TwinsTwinRoute,
   AgentIndexRoute: AgentIndexRoute,
 }

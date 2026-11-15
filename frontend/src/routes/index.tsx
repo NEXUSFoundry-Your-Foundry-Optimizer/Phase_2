@@ -178,10 +178,10 @@ export function Landing() {
                   <ArrowUpRight className="size-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 </Link>
                 <Link
-                  to="/agent/rag"
+                  to="/agent/pinn"
                   className="inline-flex items-center gap-3 rounded-full border border-[#FAF6EE]/40 bg-[#110804] py-3.5 pl-5 pr-6 text-sm font-medium text-white transition-colors hover:border-[#FAF6EE] hover:bg-[#1a0c06]"
                 >
-                  <Sparkles className="size-4 text-[#FF7A00]" /> Ask the assistant
+                  <Sparkles className="size-4 text-[#FF7A00]" /> Launch What-IF Simulation
                 </Link>
               </div>
             </Reveal>

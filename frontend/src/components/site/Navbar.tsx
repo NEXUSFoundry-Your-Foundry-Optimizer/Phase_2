@@ -14,8 +14,7 @@ const twinLinks = [
 
 const agentLinks = [
   { to: "/agent", label: "Agent Hub" },
-  { to: "/agent/rag", label: "RAG Assistant" },
-  { to: "/agent/pinn", label: "PINN Simulation" },
+  { to: "/agent/pinn", label: "What-IF Simulation" },
 ] as const;
 
 function Dropdown({

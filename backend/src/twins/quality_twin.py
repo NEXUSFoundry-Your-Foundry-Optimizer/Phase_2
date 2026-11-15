@@ -34,7 +34,7 @@ class QualityTwin:
 
         if TF_AVAILABLE and self.resolved_model_path and os.path.exists(self.resolved_model_path):
             try:
-                self.model = tf.keras.models.load_model(self.resolved_model_path)
+                self.model = tf.keras.models.load_model(self.resolved_model_path, compile=False)
                 logger.info(f"Loaded ResNet-50 model from: {self.resolved_model_path}")
             except Exception as e:
                 logger.error(f"Failed to load ResNet model from {self.resolved_model_path}: {e}")
@@ -81,11 +81,15 @@ class QualityTwin:
                     raise ValueError(f"Unable to read image at {image_path}")
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 img = cv2.resize(img, (224, 224))
-                img_array = preprocess_input(np.expand_dims(img, axis=0))
+                img_array = np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
 
-                # 2. Predict
-                pred_output = self.model.predict(img_array, verbose=0)
-                prediction = float(pred_output[0][0])
+                # 2. Predict directly via eager tensor call to avoid VirtualAlloc / thread overhead on Windows
+                try:
+                    pred_output = self.model(img_array, training=False)
+                    prediction = float(pred_output.numpy()[0][0])
+                except Exception:
+                    pred_output = self.model.predict(img_array, verbose=0)
+                    prediction = float(pred_output[0][0])
             except Exception as e:
                 logger.error(f"Error executing ResNet prediction: {e}")
                 prediction = 0.05

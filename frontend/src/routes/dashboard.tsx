@@ -48,7 +48,7 @@ function statusFor(id: keyof typeof TWINS, state: Record<string, unknown> | unde
   if (!state) return "warning";
   if (id === "melting") return Number(state["anomaly_score"] ?? 0) > 0.78 ? "critical" : "normal";
   if (id === "pouring") return Number(state["pre_pour_risk"] ?? 0) > 0.5 ? "critical" : "normal";
-  if (id === "quality") return Number(state["defect_risk"] ?? 0) > 0.5 ? "critical" : "warning";
+  if (id === "quality") return Number(state["defect_risk"] ?? 0) > 0.5 ? "critical" : "normal";
   return Number(state["sand_moisture"] ?? 0) > 5 ? "warning" : "normal";
 }
 

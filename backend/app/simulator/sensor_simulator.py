@@ -239,6 +239,7 @@ class SensorSimulator:
                     continue
 
                 pouring_state = pouring_twin.get_state()
+                batch_id = pouring_state.get("batch_id", "BATCH-DEFAULT")
                 upstream_risk = float(pouring_state.get("pre_pour_risk") or 0.0)
                 now_str = pouring_state.get("updated_at") or datetime.now().isoformat()
 
@@ -248,6 +249,33 @@ class SensorSimulator:
                 humectant_risk = max(0.0, (moisture - 4.5) / 5.5)  # >4.5% moisture raises gas porosity risk
                 target_prob = min(0.95, max(0.02, 0.70 * upstream_risk + 0.30 * humectant_risk))
 
+                # Ground quality inspection values in Datasets/inspection_labels.csv if available for this batch
+                dataset_row = None
+                try:
+                    df_insp = dataset_loader.load_csv("inspection_labels.csv")
+                    matched = df_insp[df_insp["batch_id"] == batch_id]
+                    if not matched.empty:
+                        dataset_row = matched.iloc[0].to_dict()
+                except Exception:
+                    pass
+
+                if dataset_row:
+                    defect_present = bool(dataset_row.get("defect_present", False))
+                    defect_type = str(dataset_row.get("defect_type", "none"))
+                    severity = int(dataset_row.get("severity", 0))
+                    inspection_result = str(dataset_row.get("inspection_result", "PASS"))
+                    image_id = str(dataset_row.get("image_id", f"IMG-{batch_id}"))
+                    if defect_present:
+                        target_prob = max(0.40, min(0.95, 0.25 + (severity / 5.0) * 0.70))
+                    else:
+                        target_prob = min(target_prob, 0.04)
+                else:
+                    defect_present = target_prob > 0.35
+                    defect_type = ("porosity" if moisture > 4.5 else "shrinkage") if upstream_risk > 0.5 else ("sand_inclusion" if defect_present else "none")
+                    severity = 3 if target_prob > 0.7 else (1 if defect_present else 0)
+                    inspection_result = "FAIL" if defect_present and severity > 1 else "PASS"
+                    image_id = f"IMG-{batch_id}-{now_str[-8:]}"
+
                 # Smooth telemetry with exponential moving average so graph transitions naturally without jagged square-wave steps
                 if not hasattr(self, "_smoothed_quality_risk") or self._smoothed_quality_risk is None:
                     self._smoothed_quality_risk = target_prob
@@ -255,27 +283,20 @@ class SensorSimulator:
                     self._smoothed_quality_risk = round(0.70 * self._smoothed_quality_risk + 0.30 * target_prob, 4)
 
                 defect_probability = self._smoothed_quality_risk
-                defect_present = defect_probability > 0.35
                 event = {
-                    "batch_id": pouring_state.get("batch_id", "BATCH-DEFAULT"),
-                    "image_id": f"IMG-{pouring_state.get('batch_id', 'B')}-{now_str[-8:]}",
+                    "batch_id": batch_id,
+                    "image_id": image_id,
                     "melt_temp": melting_state.get("melt_temp", 1380.0),
                     "pre_pour_risk": upstream_risk,
                     "sand_moisture": moisture,
+                    "defect_present": bool(defect_present),
+                    "defect_type": defect_type,
+                    "severity": severity,
+                    "inspection_result": inspection_result,
+                    "defect_risk": round(defect_probability, 3),
+                    "quality_score": round(max(0.0, 1.0 - defect_probability), 3),
+                    "confidence": round(0.95 + 0.04 * (1.0 - defect_probability), 2),
                 }
-                if defect_present:
-                    defect_type = ("porosity" if moisture > 4.5 else "shrinkage") if upstream_risk > 0.5 else "sand_inclusion"
-                else:
-                    defect_type = "none"
-                event["defect_type"] = defect_type
-                event["severity"] = 3 if defect_probability > 0.7 else (1 if defect_present else 0)
-                classified = await asyncio.to_thread(resnet_classifier.classify_image, event)
-
-                event["defect_present"] = bool(defect_present)
-                event["inspection_result"] = classified.get("inspection_result", "PASS")
-                event["confidence"] = float(classified.get("confidence", 0.98))
-                event["defect_risk"] = round(defect_probability, 3)
-                event["quality_score"] = round(max(0.0, 1.0 - defect_probability), 3)
 
                 state = await quality_twin.process_event(event)
                 await self._publish_events("foundry/sensors/quality", [event])

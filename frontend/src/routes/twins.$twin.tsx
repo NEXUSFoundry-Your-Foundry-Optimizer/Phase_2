@@ -60,7 +60,7 @@ function TwinPage() {
     : twin === "pouring"
       ? Number(liveState?.["pre_pour_risk"] ?? 0) > 0.7 ? "critical" : "normal"
       : twin === "quality"
-        ? Number(liveState?.["defect_risk"] ?? 0) > 0.5 ? "critical" : "warning"
+        ? Number(liveState?.["defect_risk"] ?? 0) > 0.5 ? "critical" : "normal"
         : Number(liveState?.["sand_moisture"] ?? 0) > 5 ? "warning" : "normal";
   const focused = useNexus((s) => s.focusedAlert);
   const alerts = liveAlerts ?? [];
@@ -78,7 +78,7 @@ function TwinPage() {
             <p className="mt-3 max-w-xl text-muted-foreground">{meta.blurb}</p>
           </div>
           <div className="flex flex-col items-start gap-3 sm:items-end">
-            <StatusPill status={liveState ? liveStatus : "warning"} />
+            {twin !== "quality" && <StatusPill status={liveState ? liveStatus : "normal"} />}
             {meta.comingSoon && (
               <span className="rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning">
                 Backend integration in progress
