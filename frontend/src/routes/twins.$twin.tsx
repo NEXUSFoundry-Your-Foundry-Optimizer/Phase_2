@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/site/StatusPill";
 import { TWINS, TWIN_ORDER, type TwinId } from "@/lib/nexus-data";
 import { useNexus } from "@/store/nexus";
 import { formatLiveValue, useLiveCollection, useLiveTwin, type LiveAlert } from "@/lib/live-api";
+import { QualityInspectionUpload } from "@/components/quality/QualityInspectionUpload";
 import { cn } from "@/lib/utils";
 
 const variants: Record<TwinId, SceneVariant> = {
@@ -126,6 +127,12 @@ function TwinPage() {
           </div>
         </div>
       </Reveal>
+
+      {twin === "quality" && (
+        <Reveal delay={0.11}>
+          <QualityInspectionUpload currentBatchId={String(liveState?.batch_id ?? "")} />
+        </Reveal>
+      )}
 
       <Reveal delay={0.12} className="mt-5">
         <div className="surface-panel p-5">
