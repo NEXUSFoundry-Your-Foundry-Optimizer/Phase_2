@@ -1,5 +1,5 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft, ArrowRight, Flame, Zap, Activity, Droplets, Gauge, Layers } from "lucide-react";
 import { LiveSensorChart } from "@/components/charts/LiveSensorChart";
 import { TwinVisual } from "@/components/three/TwinVisual";
 import type { SceneVariant } from "@/components/three/scene";
@@ -18,20 +18,18 @@ const variants: Record<TwinId, SceneVariant> = {
   quality: "inspection",
 };
 
-function isTwin(v: string): v is TwinId {
-  return (TWIN_ORDER as string[]).includes(v);
+function isTwin(v: unknown): v is TwinId {
+  return typeof v === "string" && (TWIN_ORDER as readonly string[]).includes(v);
 }
 
 export const Route = createFileRoute("/twins/$twin")({
   loader: ({ params }) => {
-    if (!isTwin(params.twin)) throw notFound();
-    return { twin: params.twin as TwinId };
+    const twin: TwinId = isTwin(params?.twin) ? params.twin : "melting";
+    return { twin };
   },
   head: ({ loaderData }) => {
-    if (!loaderData) {
-      return { meta: [{ title: "Twin not found — NEXUS-Foundry" }, { name: "robots", content: "noindex" }] };
-    }
-    const t = TWINS[loaderData.twin];
+    const twin: TwinId = loaderData?.twin && isTwin(loaderData.twin) ? loaderData.twin : "melting";
+    const t = TWINS[twin] || TWINS.melting;
     return {
       meta: [
         { title: `${t.name} — Live State | NEXUS-Foundry` },
@@ -45,13 +43,18 @@ export const Route = createFileRoute("/twins/$twin")({
 });
 
 function TwinPage() {
-  const { twin } = Route.useLoaderData();
-  const meta = TWINS[twin];
+  const params = Route.useParams();
+  const loaderData = Route.useLoaderData({ strict: false });
+  const rawTwin = params?.twin || loaderData?.twin;
+  const twin: TwinId = isTwin(rawTwin) ? rawTwin : "melting";
+  const meta = TWINS[twin] || TWINS.melting;
   const { state: liveState, error } = useLiveTwin(twin);
   const { data: liveAlerts } = useLiveCollection<LiveAlert[]>(`/api/v1/alerts?twin=${twin}`);
-  const values = liveState
-    ? meta.fields.map((field) => ({ label: field.label, unit: field.unit, value: formatLiveValue(field.key, liveState[field.key]) }))
-    : meta.fields.map((field) => ({ label: field.label, unit: field.unit, value: "--" }));
+  const values = (meta?.fields ?? []).map((field) => ({
+    label: field.label,
+    unit: field.unit,
+    value: liveState ? formatLiveValue(field.key, liveState[field.key]) : "--",
+  }));
   const liveStatus = twin === "melting"
     ? Number(liveState?.["anomaly_score"] ?? 0) > 0.78 ? "critical" : "normal"
     : twin === "pouring"
@@ -61,7 +64,7 @@ function TwinPage() {
         : Number(liveState?.["sand_moisture"] ?? 0) > 5 ? "warning" : "normal";
   const focused = useNexus((s) => s.focusedAlert);
   const alerts = liveAlerts ?? [];
-  const idx = TWIN_ORDER.indexOf(twin);
+  const idx = Math.max(0, TWIN_ORDER.indexOf(twin));
   const prev = TWIN_ORDER[(idx + 3) % 4]!;
   const next = TWIN_ORDER[(idx + 1) % 4]!;
 
@@ -87,31 +90,229 @@ function TwinPage() {
         </div>
       </Reveal>
 
-      <div className="mt-10 grid gap-5 lg:grid-cols-2">
-        <Reveal>
-          <TwinVisual
-            variant={variants[twin]}
-            className="h-[360px] w-full"
-            label={`Rendering ${meta.name}`}
-            live={liveState as Record<string, unknown> | null}
-          />
-        </Reveal>
-        <Reveal delay={0.08}>
-          <div className="surface-panel h-full p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium">Live Simulation Graph</h2>
-              <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
-              </span>
-            </div>
-            <div className="mt-3">
-              <LiveSensorChart twin={twin} />
-            </div>
-          </div>
-        </Reveal>
-      </div>
+      {twin === "melting" ? (
+        <>
+          {/* Row 1: Existing section with Three.js card (Left) & Live Simulation Graph - Melt Temp alone (Right) */}
+          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+            <Reveal>
+              <TwinVisual
+                variant={variants[twin]}
+                className="h-[365px] w-full"
+                label={`Rendering ${meta.name}`}
+                live={liveState as Record<string, unknown> | null}
+              />
+            </Reveal>
 
-      <Reveal delay={0.1} className="mt-5">
+            <Reveal delay={0.08}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Flame className="size-4 text-amber-500" />
+                      Live Simulation Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Melt temperature telemetry · Calibrated range 1350–1600 °C
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-500 font-semibold">
+                      {liveState?.melt_temp != null ? `${Number(liveState.melt_temp).toFixed(1)} °C` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="melting" seriesIndex={0} height={280} />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* Row 2: New section below Row 1 with Power Draw (Left, below Three.js) & Vibration (Right, below existing graph) */}
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <Reveal delay={0.1}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Zap className="size-4 text-sky-500" />
+                      Power Draw Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Induction coil electrical draw · Calibrated range 700–1400 kW
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-sky-500/30 bg-sky-500/10 text-sky-500 font-semibold">
+                      {liveState?.power_kw != null ? `${Number(liveState.power_kw).toFixed(1)} kW` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="melting" seriesIndex={1} height={280} />
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.12}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Activity className="size-4 text-purple-500" />
+                      Vibration Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Furnace structural accelerometer telemetry · Triaxial amplitude
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/10 text-purple-500 font-semibold">
+                      {liveState?.vibration_g != null ? `${Number(liveState.vibration_g).toFixed(3)} g` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="melting" seriesIndex={2} height={280} />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </>
+      ) : twin === "molding" ? (
+        <>
+          {/* Row 1: Existing section with Three.js card (Left) & Live Simulation Graph - Sand Moisture alone (Right) */}
+          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+            <Reveal>
+              <TwinVisual
+                variant={variants[twin]}
+                className="h-[365px] w-full"
+                label={`Rendering ${meta.name}`}
+                live={liveState as Record<string, unknown> | null}
+              />
+            </Reveal>
+
+            <Reveal delay={0.08}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Droplets className="size-4 text-amber-500" />
+                      Live Simulation Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Sand moisture telemetry · Calibrated range 0–10 %
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-500 font-semibold">
+                      {liveState?.sand_moisture != null ? `${Number(liveState.sand_moisture).toFixed(1)} %` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="molding" seriesIndex={0} height={280} />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* Row 2: New section below Row 1 with Permeability (Left, below Three.js) & Green Strength (Right, below existing graph) */}
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <Reveal delay={0.1}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Gauge className="size-4 text-sky-500" />
+                      Permeability Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Green sand mold air permeability · Normalized index
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-sky-500/30 bg-sky-500/10 text-sky-500 font-semibold">
+                      {liveState?.permeability != null ? `${Number(liveState.permeability).toFixed(2)} norm` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="molding" seriesIndex={1} height={280} />
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.12}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Layers className="size-4 text-emerald-500" />
+                      Green Strength Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Compacted sand compressive shear strength · Calibrated range 60–160 kPa
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-semibold">
+                      {liveState?.green_strength != null ? `${Number(liveState.green_strength).toFixed(1)} kPa` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="molding" seriesIndex={2} height={280} />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </>
+      ) : (
+        <div className="mt-10 grid gap-5 lg:grid-cols-2">
+          <Reveal>
+            <TwinVisual
+              variant={variants[twin]}
+              className="h-[360px] w-full"
+              label={`Rendering ${meta.name}`}
+              live={liveState as Record<string, unknown> | null}
+            />
+          </Reveal>
+          <Reveal delay={0.08}>
+            <div className="surface-panel h-full p-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium">Live Simulation Graph</h2>
+                <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                </span>
+              </div>
+              <div className="mt-3">
+                <LiveSensorChart twin={twin} />
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      )}
+
+      <Reveal delay={0.14} className="mt-5">
         <div className="surface-panel p-5">
           <h2 className="text-sm font-medium">Data Info</h2>
           <div className="mt-4 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
@@ -129,12 +330,12 @@ function TwinPage() {
       </Reveal>
 
       {twin === "quality" && (
-        <Reveal delay={0.11}>
+        <Reveal delay={0.16}>
           <QualityInspectionUpload currentBatchId={String(liveState?.batch_id ?? "")} />
         </Reveal>
       )}
 
-      <Reveal delay={0.12} className="mt-5">
+      <Reveal delay={0.18} className="mt-5">
         <div className="surface-panel p-5">
           <h2 className="text-sm font-medium">Alert Logs · Recorded Events</h2>
           <div className="mt-4 space-y-2">

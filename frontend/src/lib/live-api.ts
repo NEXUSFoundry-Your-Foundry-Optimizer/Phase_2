@@ -46,14 +46,20 @@ async function getJson<T>(path: string): Promise<T> {
 /** Chart slot order maps onto each twin's `meta.series` definition. */
 const POINT_KEYS = ["temp", "power", "vibration"] as const;
 
+export function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 /**
  * Project one raw twin state onto the chart series of that twin.
  * Values are read in their native engineering units (no artificial rescaling)
  * using the `field` + `unit` metadata defined in nexus-data.
  */
-function toPoint(twin: TwinId, state: LiveState): LivePoint {
+function toPoint(twin: TwinId, state: LiveState, timeLabel?: string): LivePoint {
   const meta = TWINS[twin];
-  const point = { t: timestampLabel(state) } as LivePoint;
+  const point = { t: timeLabel ?? timestampLabel(state) } as LivePoint;
   meta.series.forEach((series, index) => {
     const slot = POINT_KEYS[index] ?? "temp";
     let value = Number(state[series.field] ?? series.fallback ?? 0);
@@ -78,6 +84,7 @@ export function useLiveTwin(twin: TwinId) {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const backoffDelayRef = useRef<number>(1000);
+  const elapsedSecondsRef = useRef<number>(0);
 
   useEffect(() => {
     let active = true;
@@ -90,8 +97,10 @@ export function useLiveTwin(twin: TwinId) {
       .then(([initial, response]) => {
         if (!active) return;
         setState(initial);
-        const initialHistory = response.series.map((point) => toPoint(twin, point));
-        setHistory(initialHistory.length > 0 ? initialHistory : [toPoint(twin, initial)]);
+        const rawPoints = response.series.length > 0 ? response.series : [initial];
+        const initialHistory = rawPoints.map((point, idx) => toPoint(twin, point, formatElapsed(idx * 2)));
+        elapsedSecondsRef.current = rawPoints.length * 2;
+        setHistory(initialHistory);
       })
       .catch((cause: Error) => active && setError(cause.message));
 
@@ -114,7 +123,10 @@ export function useLiveTwin(twin: TwinId) {
           const payload = JSON.parse(message.data) as { type?: string; twin?: TwinId; state?: LiveState };
           if (payload.type === "digital_twin_update" && payload.twin === twin && payload.state) {
             setState(payload.state);
-            setHistory((previous) => [...previous.slice(-39), toPoint(twin, payload.state!)]);
+            const currentSeconds = elapsedSecondsRef.current;
+            elapsedSecondsRef.current += 2;
+            const nextPoint = toPoint(twin, payload.state, formatElapsed(currentSeconds));
+            setHistory((previous) => [...previous.slice(-39), nextPoint]);
           }
         } catch {
           // Ignore invalid JSON frame

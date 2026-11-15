@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(__dirname, "..");
@@ -26,30 +26,46 @@ async function generateHtml() {
     }
   }
 
-  // 2. Obtain HTML via SSR server fetch, or fallback to existing index.html
+  // 2. Read template HTML
   let html = null;
-  const serverPath = path.resolve(frontendDir, "dist/server/server.js");
-
-  if (fs.existsSync(serverPath)) {
-    try {
-      const serverUrl = pathToFileURL(serverPath).href;
-      const { default: server } = await import(serverUrl);
-      const res = await server.fetch(new Request("http://localhost/"));
-      html = await res.text();
-      console.log(`Prerendered HTML via SSR (${html.length} bytes)`);
-    } catch (ssrErr) {
-      console.warn("SSR render failed, falling back to static index.html template:", ssrErr.message);
-    }
-  }
-
-  if (!html && fs.existsSync(fallbackHtmlPath)) {
+  if (fs.existsSync(fallbackHtmlPath)) {
     html = fs.readFileSync(fallbackHtmlPath, "utf8");
-    console.log(`Loaded fallback index.html (${html.length} bytes)`);
+    console.log(`Loaded base index.html template (${html.length} bytes)`);
   }
 
   if (!html) {
     console.error("No HTML source available to write index.html!");
     return;
+  }
+
+  // 3. Find the newest compiled client entry JS and CSS from .output/public/assets
+  const outputAssetsDir = path.resolve(frontendDir, ".output/public/assets");
+  if (fs.existsSync(outputAssetsDir)) {
+    const assetFiles = fs.readdirSync(outputAssetsDir);
+    const latestIndexJs = assetFiles
+      .filter((f) => f.startsWith("index-") && f.endsWith(".js"))
+      .sort((a, b) => fs.statSync(path.join(outputAssetsDir, b)).mtimeMs - fs.statSync(path.join(outputAssetsDir, a)).mtimeMs)[0];
+    const latestCss = assetFiles
+      .filter((f) => f.startsWith("styles-") && f.endsWith(".css"))
+      .sort((a, b) => fs.statSync(path.join(outputAssetsDir, b)).mtimeMs - fs.statSync(path.join(outputAssetsDir, a)).mtimeMs)[0];
+
+    if (latestIndexJs) {
+      console.log(`Injecting latest entry script: /assets/${latestIndexJs}`);
+      html = html.replace(/\/assets\/index-[a-zA-Z0-9_-]+\.js/g, `/assets/${latestIndexJs}`);
+    }
+    if (latestCss) {
+      console.log(`Injecting latest stylesheet: /assets/${latestCss}`);
+      html = html.replace(/\/assets\/styles-[a-zA-Z0-9_-]+\.css/g, `/assets/${latestCss}`);
+    }
+  }
+
+  // 4. Remove broken SSR stream barrier that forces hydration for "/"
+  const barrierTag = '<script class="$tsr" id="$tsr-stream-barrier">';
+  if (html.includes(barrierTag)) {
+    const start = html.indexOf(barrierTag);
+    const end = html.indexOf("</script>", start) + 9;
+    html = html.slice(0, start) + html.slice(end);
+    console.log("Removed SSR stream barrier to enable pure client SPA routing across all subroutes");
   }
 
   // Ensure visiting /index.html directly normalizes to / so TanStack Router does not show blank
@@ -58,7 +74,7 @@ async function generateHtml() {
     html = html.replace("<head>", "<head>" + normalizeScript);
   }
 
-  // 3. Write index.html to all possible deployment targets
+  // 5. Write updated index.html to all possible deployment targets
   const targets = [
     path.resolve(frontendDir, "dist/index.html"),
     path.resolve(frontendDir, "dist/client/index.html"),
@@ -75,11 +91,14 @@ async function generateHtml() {
     }
   }
 
-  // 4. Mirror assets to frontend/assets in case Publish Directory is root
+  // 6. Mirror dist/assets to frontend/assets
   const distAssets = path.resolve(frontendDir, "dist/assets");
   const rootAssets = path.resolve(frontendDir, "assets");
   if (fs.existsSync(distAssets)) {
     try {
+      if (fs.existsSync(rootAssets)) {
+        fs.rmSync(rootAssets, { recursive: true, force: true });
+      }
       fs.cpSync(distAssets, rootAssets, { recursive: true });
       console.log("Mirrored dist/assets to frontend/assets");
     } catch (err) {
