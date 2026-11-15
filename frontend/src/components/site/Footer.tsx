@@ -65,11 +65,6 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/agent/rag" className="transition-colors hover:text-[#ff5500]">
-                  RAG Assistant
-                </Link>
-              </li>
-              <li>
                 <Link to="/agent/pinn" className="transition-colors hover:text-[#ff5500]">
                   PINN Simulation
                 </Link>

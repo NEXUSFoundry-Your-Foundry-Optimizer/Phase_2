@@ -1,5 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
 import asyncio
 import logging
 import os
@@ -155,15 +157,45 @@ async def batches():
         "alloy": str(row.get("alloy_grade", "unknown")),
     } for row in rows.to_dict(orient="records")]
 
+class SHAPInquiry(BaseModel):
+    query: Optional[str] = "why this defect"
+    batch_id: Optional[str] = None
+
 @app.get("/api/analytics/shap")
-async def analytics_shap():
-    explanation = shap_explainer.explain("live", {**melting_twin.get_state(), **molding_twin.get_state()})
+async def analytics_shap(q: Optional[str] = None):
+    features = {
+        "ambient_air_temp": 24.5,
+        "ambient_air_humidity": 55.0,
+        "alloy_grade_encoded": 1.0,
+        "compactness": 44.0,
+        "pour_duration_sec": 45.0,
+        **melting_twin.get_state(),
+        **molding_twin.get_state(),
+        **pouring_twin.get_state(),
+    }
+    explanation = shap_explainer.explain("live", features, query=q)
+    pred = xgboost_model.predict(features)
+    prob = pred.get("defect_probability")
+    if prob is None or prob == 0:
+        prob = float(pouring_twin.get_state().get("pre_pour_risk", 0.12))
+
     return {
         "prediction": "Defect risk",
-        "probability": float(pouring_twin.get_state().get("pre_pour_risk", 0.0)),
-        "recommendation": f"Monitor {explanation['top_risk_driver']} before the next pour.",
-        "features": [{"name": key, "value": value} for key, value in explanation["feature_attributions"].items()],
+        "probability": float(prob),
+        "batch_id": str(features.get("batch_id", "CB-001")),
+        "top_risk_driver": explanation["top_risk_driver"],
+        "recommendation": explanation["recommendation"],
+        "features": explanation["top_features"],
+        "explanation_text": explanation["explanation_text"],
+        "key_parameters": explanation["key_parameters"],
+        "contribution_groups": explanation["contribution_groups"],
+        "all_attributions": explanation["feature_attributions"],
     }
+
+@app.post("/api/analytics/shap")
+async def analytics_shap_post(inquiry: Optional[SHAPInquiry] = None):
+    q = inquiry.query if inquiry else "why this defect"
+    return await analytics_shap(q=q)
 
 @app.post("/api/simulate/what-if")
 async def contract_what_if(request: WhatIfRequest):
