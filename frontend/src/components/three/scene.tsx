@@ -34,7 +34,10 @@ export interface SceneTelemetry {
   inspectionResult?: string;
 }
 
-const DARK_BG = "#0d0e11";
+// Dark cream theme matching website tokens (--surface-2 #E7DBB8, --border #D1C5A1)
+const DARK_BG = "#E7DBB8";
+const GRID_MAIN = "#B8A880";
+const GRID_LINES = "#D1C5A1";
 const WARM_RIM = "#ff8a3d";
 
 // ---- materials -------------------------------------------------------------
@@ -880,7 +883,7 @@ export default function Scene({
       {variant === "inspection" && <InspectionScene {...telemetry} />}
 
       <ContactShadows position={[0, -1.73, 0]} opacity={0.55} scale={11} blur={2.4} far={5} />
-      <gridHelper args={[20, 20, "#20242c", "#191c21"]} position={[0, -1.72, 0]} />
+      <gridHelper args={[20, 20, GRID_MAIN, GRID_LINES]} position={[0, -1.72, 0]} />
       <OrbitControls
         enablePan={false}
         enableZoom={false}

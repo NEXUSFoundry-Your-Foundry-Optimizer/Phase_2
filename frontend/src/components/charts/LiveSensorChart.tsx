@@ -68,6 +68,23 @@ export function LiveSensorChart({ twin, seriesIndex, height = 280 }: LiveSensorC
         domain = [(dataMin: number) => Math.floor(Math.max(0, dataMin - 10)), (dataMax: number) => Math.ceil(dataMax + 10)];
         tickFormatter = (v: number) => (typeof v === "number" ? Math.round(v).toString() : String(v));
       }
+    } else if (twin === "pouring") {
+      if (s.key === "temp") {
+        // Pour Temperature (°C)
+        colors = { stroke: "#d97706", fill: "#f59e0b" };
+        domain = [(dataMin: number) => Math.floor(Math.min(1380, dataMin - 15)), (dataMax: number) => Math.ceil(Math.max(1520, dataMax + 15))];
+        tickFormatter = (v: number) => (typeof v === "number" ? Math.round(v).toString() : String(v));
+      } else if (s.key === "power") {
+        // Ladle Fill (%)
+        colors = { stroke: "#0284c7", fill: "#38bdf8" };
+        domain = [0, 100];
+        tickFormatter = (v: number) => (typeof v === "number" ? Math.round(v).toString() : String(v));
+      } else if (s.key === "vibration") {
+        // Pour Speed (m/s)
+        colors = { stroke: "#7c3aed", fill: "#a855f7" };
+        domain = [0, (dataMax: number) => Number(Math.max(1.0, dataMax + 0.2).toFixed(1))];
+        tickFormatter = (v: number) => (typeof v === "number" ? v.toFixed(2) : String(v));
+      }
     } else if (s.percent) {
       domain = [0, 100];
     }

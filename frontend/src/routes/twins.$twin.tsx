@@ -286,6 +286,104 @@ function TwinPage() {
             </Reveal>
           </div>
         </>
+      ) : twin === "pouring" ? (
+        <>
+          {/* Row 1: Three.js card (Left) & Live Simulation Graph - Pour Temperature alone (Right) */}
+          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+            <Reveal>
+              <TwinVisual
+                variant={variants[twin]}
+                className="h-[365px] w-full"
+                label={`Rendering ${meta.name}`}
+                live={liveState as Record<string, unknown> | null}
+              />
+            </Reveal>
+
+            <Reveal delay={0.08}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Flame className="size-4 text-amber-500" />
+                      Live Simulation Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Pour temperature telemetry · Calibrated range 1380–1520 °C
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-500 font-semibold">
+                      {liveState?.pour_temp != null ? `${Number(liveState.pour_temp).toFixed(1)} °C` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="pouring" seriesIndex={0} height={280} />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* Row 2: New section below Row 1 with Ladle Fill (Left, below Three.js) & Pour Speed (Right, below existing graph) */}
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <Reveal delay={0.1}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Droplets className="size-4 text-sky-500" />
+                      Ladle Fill Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Transfer ladle molten metal capacity · Calibrated range 0–100 %
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-sky-500/30 bg-sky-500/10 text-sky-500 font-semibold">
+                      {liveState?.ladle_fill_pct != null ? `${Number(liveState.ladle_fill_pct).toFixed(1)} %` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="pouring" seriesIndex={1} height={280} />
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.12}>
+              <div className="surface-panel h-full min-h-[365px] p-5 flex flex-col justify-between">
+                <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <Activity className="size-4 text-purple-500" />
+                      Pour Speed Graph
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Stream linear velocity · Calibrated nozzle discharge
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs px-2.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/10 text-purple-500 font-semibold">
+                      {liveState?.pour_speed != null ? `${Number(liveState.pour_speed).toFixed(2)} m/s` : "--"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-primary pulse-dot" /> streaming
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex-1">
+                  <LiveSensorChart twin="pouring" seriesIndex={2} height={280} />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </>
       ) : (
         <div className="mt-10 grid gap-5 lg:grid-cols-2">
           <Reveal>
