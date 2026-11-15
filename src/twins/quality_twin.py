@@ -26,7 +26,7 @@ class QualityTwin:
     identifies defect types (gas_porosity, shrinkage, etc.), and records predictions to PostgreSQL.
     """
 
-    def __init__(self, model_path: str = 'models/resnet50_quality_final.h5'):
+    def __init__(self, model_path: str = 'models/resnet50_quality_final.keras'):
         print("Loading Quality Twin ResNet-50 Model...")
         self.classes = ['OK', 'Defect']
         self.model = None
@@ -46,21 +46,17 @@ class QualityTwin:
                 logger.warning(f"ResNet model file not found at {model_path}. Simulated mode active.")
 
     def _resolve_model_path(self, path: str) -> Optional[str]:
-        """Resolve model path across relative root, backend, and absolute paths."""
+        """Resolve model path across relative root, backend, and absolute paths, preferring .keras."""
+        keras_path = path.replace(".h5", ".keras")
         candidates = [
+            keras_path,
             path,
-            path.replace(".h5", ".keras"),
+            str(Path(__file__).resolve().parents[2] / keras_path),
             str(Path(__file__).resolve().parents[2] / path),
-            str(Path(__file__).resolve().parents[2] / path.replace(".h5", ".keras")),
-            str(Path(__file__).resolve().parents[1] / path),
-            f"backend/{path}",
-            f"../{path}",
-            f"/app/{path}",
-            f"/app/{path.replace('.h5', '.keras')}",
-            "models/resnet50_quality_final.h5",
-            "models/resnet50_quality_final.keras",
-            "backend/models/resnet50_quality_final.h5",
-            "backend/models/resnet50_quality_final.keras",
+            f"models/{os.path.basename(keras_path)}",
+            f"backend/models/{os.path.basename(keras_path)}",
+            f"../models/{os.path.basename(keras_path)}",
+            f"/app/models/{os.path.basename(keras_path)}",
         ]
         for candidate in candidates:
             if candidate and os.path.exists(candidate):

@@ -18,7 +18,10 @@ export interface LivePoint {
 export function formatLiveValue(key: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "--";
   if (typeof value === "number") {
-    if (key === "pre_pour_risk" || key === "defect_probability" || key === "risk_score") return (value * 100).toFixed(2);
+    if (key === "pre_pour_risk" || key === "defect_probability" || key === "risk_score" || key === "defect_risk" || key === "quality_score") {
+      const val = value <= 1.0 ? value * 100 : value;
+      return val.toFixed(2);
+    }
     return value.toFixed(2);
   }
   if (typeof value === "boolean") return value ? "Yes" : "No";

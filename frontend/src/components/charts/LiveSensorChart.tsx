@@ -65,11 +65,12 @@ export function LiveSensorChart({ twin }: { twin: TwinId }) {
           {/* Primary scale (°C / % / …) on the left, secondary on the right. */}
           {meta.series.map((s, i) => {
             const id = axisIds[i] ?? "c";
+            const domain: [number | string, number | string] = s.percent ? [0, 100] : ["auto", "auto"];
             return (
               <YAxis
                 key={id}
                 yAxisId={id}
-                domain={["auto", "auto"]}
+                domain={domain}
                 orientation={i === 1 ? "right" : "left"}
                 hide={i === 2}
                 {...(s.unit ? { label: axisUnitLabel(s.unit) } : {})}

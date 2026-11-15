@@ -78,7 +78,7 @@ export const TWINS: Record<TwinId, TwinMeta> = {
     name: "Quality Twin",
     icon: "scan",
     blurb: "ResNet-50 visual inspection and defect classification.",
-    comingSoon: true,
+    comingSoon: false,
     metricLabel: "Defect probability",
     fields: [
       { key: "defect_risk", label: "Defect Risk", unit: "%" },

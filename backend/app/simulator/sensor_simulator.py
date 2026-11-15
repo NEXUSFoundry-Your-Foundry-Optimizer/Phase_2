@@ -246,7 +246,15 @@ class SensorSimulator:
                 molding_state = molding_twin.get_state()
                 moisture = float(molding_state.get("sand_moisture") or 0.0)
                 humectant_risk = max(0.0, (moisture - 4.5) / 5.5)  # >4.5% moisture raises gas porosity risk
-                defect_probability = min(1.0, 0.85 * upstream_risk + 0.15 * humectant_risk)
+                target_prob = min(0.95, max(0.02, 0.70 * upstream_risk + 0.30 * humectant_risk))
+
+                # Smooth telemetry with exponential moving average so graph transitions naturally without jagged square-wave steps
+                if not hasattr(self, "_smoothed_quality_risk") or self._smoothed_quality_risk is None:
+                    self._smoothed_quality_risk = target_prob
+                else:
+                    self._smoothed_quality_risk = round(0.70 * self._smoothed_quality_risk + 0.30 * target_prob, 4)
+
+                defect_probability = self._smoothed_quality_risk
                 defect_present = defect_probability > 0.35
                 event = {
                     "batch_id": pouring_state.get("batch_id", "BATCH-DEFAULT"),
@@ -265,8 +273,8 @@ class SensorSimulator:
 
                 event["defect_present"] = bool(defect_present)
                 event["inspection_result"] = classified.get("inspection_result", "PASS")
-                defect_probability_out = float(classified.get("confidence", 0.98)) if defect_present else round(defect_probability, 3)
-                event["defect_risk"] = defect_probability_out
+                event["confidence"] = float(classified.get("confidence", 0.98))
+                event["defect_risk"] = round(defect_probability, 3)
                 event["quality_score"] = round(max(0.0, 1.0 - defect_probability), 3)
 
                 state = await quality_twin.process_event(event)
@@ -281,10 +289,10 @@ class SensorSimulator:
                         event_key=f"quality:{state['batch_id']}:{now_str}",
                         message=(
                             f"Visual inspection flagged {defect_type or 'surface defect'} on casting "
-                            f"{state['batch_id']} (confidence {defect_probability_out*100:.1f}%)."
+                            f"{state['batch_id']} (confidence {defect_probability*100:.1f}%)."
                         ),
                     )
-                await asyncio.sleep(4.0 / max(0.1, global_simulator_state.replay_speed))
+                await asyncio.sleep(2.0 / max(0.1, global_simulator_state.replay_speed))
 
             except asyncio.CancelledError:
                 break
