@@ -171,6 +171,7 @@ The backend serves an interactive OpenAPI / Swagger UI at [`http://localhost:800
 ### Prerequisites
 * **Python 3.10 – 3.12**
 * **Docker & Docker Compose** (for backing databases: InfluxDB, PostgreSQL, Redis, Kafka)
+* **Git LFS** (required to download the ResNet-50 quality model)
 
 ### 1. Environment Configuration
 Create a `.env` file in the `backend/` directory or project root:
@@ -203,6 +204,9 @@ DATASETS_DIR=./Datasets
 
 ### 2. Setup Virtual Environment & Install Dependencies
 ```bash
+# Fetch the ResNet-50 model weights
+git lfs pull
+
 # Create virtual environment
 python -m venv .venv
 

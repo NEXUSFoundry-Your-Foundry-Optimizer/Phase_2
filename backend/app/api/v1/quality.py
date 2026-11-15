@@ -24,7 +24,7 @@ def get_quality_twin_service():
     global _quality_twin_svc
     if _quality_twin_svc is None:
         try:
-            from src.twins.quality_twin import QualityTwin
+            from backend.src.twins.quality_twin import QualityTwin
             _quality_twin_svc = QualityTwin()
         except Exception as e:
             # Fallback: return None so caller can handle gracefully
@@ -78,22 +78,16 @@ async def image_inspect_casting(
     # --- Run ResNet-50 inference via QualityTwin service ---
     svc = get_quality_twin_service()
 
-    if svc is not None:
-        # Full ResNet inference (requires TF installed)
+    try:
+        if svc is None:
+            raise HTTPException(
+                status_code=503,
+                detail="ResNet quality inspection is unavailable because its model failed to load.",
+            )
         result = svc.process_inspection_image(file_location, batch_id)
-    else:
-        # Fallback: use the existing lightweight resnet_classifier stub
-        metadata = {
-            "batch_id": batch_id,
-            "image_id": safe_filename,
-            "defect_present": False,
-            "defect_type": "none",
-            "severity": 0,
-            "inspection_result": "PASS",
-        }
-        result = resnet_classifier.classify_image(metadata)
-        result["batch_id"] = batch_id
-        result["note"] = "TensorFlow not installed — using stub classifier. Deploy in Docker for real ResNet inference."
+    finally:
+        if os.path.isfile(file_location):
+            os.remove(file_location)
 
     # --- Update digital twin state ---
     twin_event = {

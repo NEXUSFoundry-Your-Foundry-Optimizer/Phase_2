@@ -12,7 +12,6 @@ try:
     import tensorflow as tf
     import numpy as np
     import cv2
-    from tensorflow.keras.applications.resnet50 import preprocess_input
     TF_AVAILABLE = True
 except ImportError:
     TF_AVAILABLE = False
@@ -32,35 +31,40 @@ class QualityTwin:
         self.model = None
         self.resolved_model_path = self._resolve_model_path(model_path)
 
-        if TF_AVAILABLE and self.resolved_model_path and os.path.exists(self.resolved_model_path):
-            try:
-                self.model = tf.keras.models.load_model(self.resolved_model_path, compile=False)
-                logger.info(f"Loaded ResNet-50 model from: {self.resolved_model_path}")
-            except Exception as e:
-                logger.error(f"Failed to load ResNet model from {self.resolved_model_path}: {e}")
-                self.model = None
-        else:
-            if not TF_AVAILABLE:
-                logger.warning("TensorFlow is not available. QualityTwin will operate in simulated mode.")
-            else:
-                logger.warning(f"ResNet model file not found at {model_path}. Simulated mode active.")
+        if not self.resolved_model_path or not os.path.isfile(self.resolved_model_path):
+            raise FileNotFoundError(f"ResNet model file not found: {model_path}")
+
+        with open(self.resolved_model_path, "rb") as model_file:
+            if model_file.read(64).startswith(b"version https://git-lfs.github.com/spec/v1"):
+                raise RuntimeError(
+                    f"ResNet model at {self.resolved_model_path} is a Git LFS pointer. "
+                    "Fetch the model weights with `git lfs pull`."
+                )
+
+        if not TF_AVAILABLE:
+            raise RuntimeError("TensorFlow and OpenCV are required for ResNet quality inspection.")
+
+        try:
+            self.model = tf.keras.models.load_model(self.resolved_model_path)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load ResNet model from {self.resolved_model_path}: {e}"
+            ) from e
+
+        logger.info(f"Loaded ResNet-50 model from: {self.resolved_model_path}")
 
     def _resolve_model_path(self, path: str) -> Optional[str]:
-        """Resolve model path across relative root, backend, and absolute paths, preferring .keras."""
-        keras_path = path.replace(".h5", ".keras")
-        candidates = [
-            keras_path,
-            path,
-            str(Path(__file__).resolve().parents[2] / keras_path),
-            str(Path(__file__).resolve().parents[2] / path),
-            f"models/{os.path.basename(keras_path)}",
-            f"backend/models/{os.path.basename(keras_path)}",
-            f"../models/{os.path.basename(keras_path)}",
-            f"/app/models/{os.path.basename(keras_path)}",
-        ]
+        """Resolve model paths from the working directory or repository root."""
+        keras_path = Path(path.replace(".h5", ".keras"))
+        backend_root = Path(__file__).resolve().parents[2]
+        repository_root = backend_root.parent
+        candidates = [keras_path, Path(path)]
+        for root in (repository_root, backend_root):
+            candidates.extend((root / keras_path, root / Path(path)))
+
         for candidate in candidates:
-            if candidate and os.path.exists(candidate):
-                return candidate
+            if candidate.is_file():
+                return str(candidate)
         return path
 
     def process_inspection_image(self, image_path: str, batch_id: str) -> Dict[str, Any]:
@@ -71,32 +75,32 @@ class QualityTwin:
         Returns JSON-serializable dict:
         {"defect_present": bool, "confidence": float, "defect_type": str, ...}
         """
-        prediction = 0.0
+        if self.model is None:
+            raise RuntimeError("ResNet model is not loaded; visual inspection cannot run.")
+        if not os.path.isfile(image_path):
+            raise FileNotFoundError(f"Inspection image not found: {image_path}")
 
-        if TF_AVAILABLE and self.model is not None and os.path.exists(image_path):
-            try:
-                # 1. Load and preprocess image
-                img = cv2.imread(image_path)
-                if img is None:
-                    raise ValueError(f"Unable to read image at {image_path}")
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, (224, 224))
-                img_array = np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
+        try:
+            img = cv2.imread(image_path)
+            if img is None:
+                raise ValueError(f"Unable to read image at {image_path}")
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (224, 224))
+            img_array = np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
 
-                # 2. Predict directly via eager tensor call to avoid VirtualAlloc / thread overhead on Windows
-                try:
-                    pred_output = self.model(img_array, training=False)
-                    prediction = float(pred_output.numpy()[0][0])
-                except Exception:
-                    pred_output = self.model.predict(img_array, verbose=0)
-                    prediction = float(pred_output[0][0])
-            except Exception as e:
-                logger.error(f"Error executing ResNet prediction: {e}")
-                prediction = 0.05
-        else:
-            # Fallback or synthetic scoring if model or image file is pending
-            logger.info(f"Using simulated ResNet inference for image: {image_path}")
-            prediction = 0.08  # Default OK with low defect probability
+            pred_output = np.asarray(self.model.predict(img_array, verbose=0))
+            if pred_output.shape == (1, 1):
+                prediction = float(pred_output[0, 0])
+            elif pred_output.shape == (1, 2):
+                prediction = float(pred_output[0, 1])
+            else:
+                raise ValueError(
+                    f"Expected a single sigmoid or two-class ResNet output; got {pred_output.shape}."
+                )
+            if not np.isfinite(prediction) or not 0.0 <= prediction <= 1.0:
+                raise ValueError(f"ResNet returned an invalid defect probability: {prediction}")
+        except Exception as e:
+            raise RuntimeError(f"ResNet prediction failed for {image_path}: {e}") from e
 
         # 3. Format output
         is_defect = bool(prediction > 0.5)

@@ -110,17 +110,8 @@ export function QualityInspectionUpload({ currentBatchId }: { currentBatchId?: s
         throw new Error(`Inference failed (${response.status}): ${errText}`);
       }
 
-      const raw = await response.json();
-      const inf = raw.inference || raw.prediction || raw;
-      const parsedResult: InspectionResult = {
-        batch_id: inf.batch_id || batchId || "BATCH-QC-001",
-        defect_present: Boolean(inf.defect_present),
-        confidence: typeof inf.confidence === "number" ? inf.confidence : Number(inf.confidence || 0),
-        defect_type: String(inf.defect_type || (inf.defect_present ? "Defect" : "none")),
-        raw_score: typeof inf.raw_score === "number" ? inf.raw_score : Number(inf.defect_risk || 0.02),
-        image_path: inf.image_path || inf.filename,
-      };
-      setResult(parsedResult);
+      const data = (await response.json()) as InspectionResult;
+      setResult(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setErrorMsg(message);
