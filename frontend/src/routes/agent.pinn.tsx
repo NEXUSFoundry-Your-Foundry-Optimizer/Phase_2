@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Zap, Flame, Mountain, Droplets, CheckCircle2, Save, Play } from "lucide-react";
+import { Zap, Flame, Mountain, Droplets, CheckCircle2, Play, AlertTriangle } from "lucide-react";
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -33,10 +33,106 @@ const TWIN_LABELS: Record<"melting" | "molding" | "pouring", { name: string; ico
   pouring: { name: "Pouring Twin", icon: Droplets, desc: "Bottom-Pour Ladle & Stream" },
 };
 
+interface ThresholdConfig {
+  minNormal: number;
+  maxNormal: number;
+  warnHigh: number;
+  critHigh: number;
+  warnLow: number;
+  critLow: number;
+  highRisk: string;
+  lowRisk: string;
+  unit: string;
+  label: string;
+}
+
+const THRESHOLDS: Record<"melting" | "molding" | "pouring", ThresholdConfig> = {
+  melting: {
+    label: "Proposed Setpoint",
+    unit: "°C",
+    minNormal: 1380,
+    maxNormal: 1450,
+    warnHigh: 1460,
+    critHigh: 1490,
+    warnLow: 1350,
+    critLow: 1320,
+    highRisk: "Hot Tears, Shrinkage, Lining Failure. Above 1490°C, the metal burns carbon and risks penetrating the sand mold.",
+    lowRisk: "Cold Shut, Misrun. Below 1350°C, the iron starts to freeze in the ladle before pouring.",
+  },
+  molding: {
+    label: "Proposed Moisture",
+    unit: "%",
+    minNormal: 3.2,
+    maxNormal: 4.5,
+    warnHigh: 5.0,
+    critHigh: 6.0,
+    warnLow: 2.8,
+    critLow: 2.0,
+    highRisk: "Gas Porosity (Blowholes/Pinholes), Steam defects. Above 5% moisture, steam explodes into the liquid metal.",
+    lowRisk: "Mold collapse, Sand Inclusion. Below 2.8%, the green sand loses strength and the mold wall can collapse.",
+  },
+  pouring: {
+    label: "Proposed Speed",
+    unit: "m/s",
+    minNormal: 0.60,
+    maxNormal: 0.75,
+    warnHigh: 0.80,
+    critHigh: 0.90,
+    warnLow: 0.55,
+    critLow: 0.45,
+    highRisk: "Turbulence, Gas Entrapment, Mold Erosion. Fast pouring causes the metal to splash, trap air, and erode the sand mold.",
+    lowRisk: "Cold Shut, Misrun. Slow pouring causes the metal to cool and solidify before the mold is full.",
+  },
+};
+
+interface ThresholdBreach {
+  breached: boolean;
+  level: "WARNING BREACH" | "CRITICAL BREACH";
+  direction: "high" | "low";
+  trigger: string;
+  message: string;
+}
+
+function checkThreshold(type: "melting" | "molding" | "pouring", rawVal: string | number): ThresholdBreach | null {
+  const val = Number(rawVal);
+  if (!Number.isFinite(val)) return null;
+  const cfg = THRESHOLDS[type];
+
+  if (val > cfg.warnHigh) {
+    const isCritical = val >= cfg.critHigh;
+    return {
+      breached: true,
+      level: isCritical ? "CRITICAL BREACH" : "WARNING BREACH",
+      direction: "high",
+      trigger: isCritical ? `> ${cfg.critHigh}${cfg.unit}` : `> ${cfg.warnHigh}${cfg.unit}`,
+      message: cfg.highRisk,
+    };
+  }
+
+  if (val < cfg.warnLow) {
+    const isCritical = val <= cfg.critLow;
+    return {
+      breached: true,
+      level: isCritical ? "CRITICAL BREACH" : "WARNING BREACH",
+      direction: "low",
+      trigger: isCritical ? `< ${cfg.critLow}${cfg.unit}` : `< ${cfg.warnLow}${cfg.unit}`,
+      message: cfg.lowRisk,
+    };
+  }
+
+  return null;
+}
+
 function PINNPage() {
   const [activeTwin, setActiveTwin] = useState<"melting" | "molding" | "pouring">("melting");
   const [running, setRunning] = useState<"melting" | "molding" | "pouring" | null>(null);
   const [results, setResults] = useState<WhatIfResult | null>(null);
+  const [simulatedParams, setSimulatedParams] = useState<{
+    twin: "melting" | "molding" | "pouring";
+    setpoint: string;
+    moisture: string;
+    speed: string;
+  } | null>(null);
   const { state: melting } = useLiveTwin("melting");
   const { state: molding } = useLiveTwin("molding");
   const { state: pouring } = useLiveTwin("pouring");
@@ -45,10 +141,49 @@ function PINNPage() {
   const [moisture, setMoisture] = useState("3.5");
   const [speed, setSpeed] = useState("0.68");
 
+  // Clear previous results whenever inputs are edited so results are only shown upon clicking "Run Simulation"
+  const handleSetpointChange = (val: string) => {
+    setSetpoint(val);
+    setResults(null);
+    setSimulatedParams(null);
+  };
+
+  const handleMoistureChange = (val: string) => {
+    setMoisture(val);
+    setResults(null);
+    setSimulatedParams(null);
+  };
+
+  const handleSpeedChange = (val: string) => {
+    setSpeed(val);
+    setResults(null);
+    setSimulatedParams(null);
+  };
+
+  // Threshold breach warning is evaluated ONLY on the simulated result after clicking Run Simulation
+  const resultsBreach = useMemo(() => {
+    if (!results || results.error || !simulatedParams) return null;
+    if (simulatedParams.twin === "melting") {
+      return (
+        checkThreshold("melting", simulatedParams.setpoint) ||
+        (results.new_predicted_state?.pour_temp != null
+          ? checkThreshold("melting", results.new_predicted_state.pour_temp)
+          : null)
+      );
+    }
+    if (simulatedParams.twin === "molding") {
+      return checkThreshold("molding", simulatedParams.moisture);
+    }
+    return checkThreshold("pouring", simulatedParams.speed);
+  }, [results, simulatedParams]);
+
+  const activeBreach = resultsBreach;
+
   const runSimulation = async (type: "melting" | "molding" | "pouring") => {
     setActiveTwin(type);
     setRunning(type);
     setResults(null);
+    setSimulatedParams(null);
     try {
       const parameters = type === "melting"
         ? { pour_temp: Number(setpoint), melt_temp: Number(setpoint) }
@@ -57,8 +192,10 @@ function PINNPage() {
           : { pour_speed: Number(speed) };
       const result = await postJson<WhatIfResult>("/api/v1/simulation/what-if", { twin: type, parameters });
       setResults(result);
+      setSimulatedParams({ twin: type, setpoint, moisture, speed });
     } catch (error) {
       setResults({ error: error instanceof Error ? error.message : "Simulation failed" });
+      setSimulatedParams(null);
     } finally {
       setRunning(null);
     }
@@ -113,7 +250,7 @@ function PINNPage() {
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
                   <Flame className="size-4 text-orange-500" />
-                  Melting Twin
+                  <span>Melting Twin</span>
                 </div>
                 {activeTwin === "melting" && (
                   <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
@@ -132,11 +269,16 @@ function PINNPage() {
                     <input
                       type="number"
                       value={setpoint}
-                      onChange={(e) => setSetpoint(e.target.value)}
-                      className="w-20 rounded border border-border bg-card px-2 py-1 font-mono text-foreground outline-none focus:border-primary"
+                      onChange={(e) => handleSetpointChange(e.target.value)}
+                      className="w-20 rounded border border-border bg-card px-2 py-1 font-mono text-foreground outline-none transition-colors focus:border-primary"
                     />
                     <span>°C</span>
                   </div>
+                </div>
+
+                <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
+                  <span>Normal Range: 1380°C – 1450°C</span>
+                  <span>Warn: &gt;1460°C / &lt;1350°C</span>
                 </div>
               </div>
               <button
@@ -154,7 +296,7 @@ function PINNPage() {
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
                   <Mountain className="size-4 text-stone-400" />
-                  Molding Twin
+                  <span>Molding Twin</span>
                 </div>
                 {activeTwin === "molding" && (
                   <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
@@ -173,11 +315,16 @@ function PINNPage() {
                     <input
                       type="number"
                       value={moisture}
-                      onChange={(e) => setMoisture(e.target.value)}
-                      className="w-20 rounded border border-border bg-card px-2 py-1 font-mono text-foreground outline-none focus:border-primary"
+                      onChange={(e) => handleMoistureChange(e.target.value)}
+                      className="w-20 rounded border border-border bg-card px-2 py-1 font-mono text-foreground outline-none transition-colors focus:border-primary"
                     />
                     <span>%</span>
                   </div>
+                </div>
+
+                <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
+                  <span>Normal Range: 3.2% – 4.5%</span>
+                  <span>Warn: &gt;5.0% / &lt;2.8%</span>
                 </div>
               </div>
               <button
@@ -195,7 +342,7 @@ function PINNPage() {
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
                   <Droplets className="size-4 text-blue-400" />
-                  Pouring Twin
+                  <span>Pouring Twin</span>
                 </div>
                 {activeTwin === "pouring" && (
                   <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
@@ -215,11 +362,16 @@ function PINNPage() {
                       type="number"
                       value={speed}
                       step="0.01"
-                      onChange={(e) => setSpeed(e.target.value)}
-                      className="w-20 rounded border border-border bg-card px-2 py-1 font-mono text-foreground outline-none focus:border-primary"
+                      onChange={(e) => handleSpeedChange(e.target.value)}
+                      className="w-20 rounded border border-border bg-card px-2 py-1 font-mono text-foreground outline-none transition-colors focus:border-primary"
                     />
                     <span>m/s</span>
                   </div>
+                </div>
+
+                <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
+                  <span>Normal Range: 0.60 – 0.75 m/s</span>
+                  <span>Warn: &gt;0.80 m/s / &lt;0.55 m/s</span>
                 </div>
               </div>
               <button
@@ -247,50 +399,96 @@ function PINNPage() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                 {results.error ? <p className="text-sm text-destructive">{results.error}</p> : <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg bg-background p-4">
-                    <div className="text-sm text-muted-foreground">
-                      {activeTwin === "melting"
-                        ? "New Pour Temperature"
-                        : activeTwin === "molding"
-                        ? "Simulated Sand Moisture"
-                        : "Simulated Pour Speed"}
+                  <div className={cn("rounded-lg p-4 transition-colors", activeBreach ? "border border-red-500/30 bg-card" : "bg-background")}>
+                    <div className="text-sm text-muted-foreground flex items-center justify-between">
+                      <span>
+                        {(simulatedParams?.twin ?? activeTwin) === "melting"
+                          ? "New Pour Temperature"
+                          : (simulatedParams?.twin ?? activeTwin) === "molding"
+                          ? "Simulated Sand Moisture"
+                          : "Simulated Pour Speed"}
+                      </span>
+                      {activeBreach && (
+                        <span className="font-bold text-red-500 text-xs uppercase tracking-wide">
+                          BREACH
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-1 font-mono text-xl font-medium">
-                      {activeTwin === "melting"
-                        ? `${results.new_predicted_state?.pour_temp?.toFixed(2) ?? setpoint}°C`
-                        : activeTwin === "molding"
-                        ? `${moisture}%`
-                        : `${speed} m/s`}
+                    <div className="mt-1 font-mono text-xl font-medium text-foreground">
+                      {(simulatedParams?.twin ?? activeTwin) === "melting"
+                        ? `${results.new_predicted_state?.pour_temp?.toFixed(2) ?? simulatedParams?.setpoint ?? setpoint}°C`
+                        : (simulatedParams?.twin ?? activeTwin) === "molding"
+                        ? `${simulatedParams?.moisture ?? moisture}%`
+                        : `${simulatedParams?.speed ?? speed} m/s`}
+                      {activeBreach && (
+                        <span className="ml-2 text-xs font-bold text-red-500 font-sans uppercase">
+                          ({activeBreach.level})
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="rounded-lg bg-background p-4">
-                    <div className="text-sm text-muted-foreground">New Defect Risk</div>
-                    <div className="mt-1 flex items-center gap-2 font-mono text-xl font-medium text-green-500">
+                  <div className={cn("rounded-lg p-4 transition-colors", activeBreach || (results.risk ?? 0) > 0.3 ? "border border-red-500/30 bg-card" : "bg-background")}>
+                    <div className="text-sm text-muted-foreground flex items-center justify-between">
+                      <span>New Defect Risk</span>
+                      {(activeBreach || (results.risk ?? 0) > 0.3) && (
+                        <span className="font-bold text-red-500 text-xs uppercase tracking-wide">
+                          BREACH RISK
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 font-mono text-xl font-medium text-foreground">
                       {((results.risk ?? 0) * 100).toFixed(2)}% <span className="text-sm text-muted-foreground">(from {((results.previous_risk ?? 0) * 100).toFixed(2)}%)</span>
                     </div>
                   </div>
                 </div>
+
+                {/* Threshold Breach Detected Banner with Normal Font Color */}
+                {activeBreach && (
+                  <div className="rounded-lg border border-border bg-card p-3 text-xs text-foreground">
+                    <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                      <AlertTriangle className="size-4 shrink-0 text-red-500" />
+                      <span>Threshold Breach Detected:</span>
+                      <span className="font-bold text-red-500 uppercase tracking-wide">
+                        {activeBreach.level}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-muted-foreground leading-relaxed">
+                      Proposed value exceeds safe operational bounds ({activeBreach.trigger}). Defect risks: {activeBreach.message}
+                    </p>
+                  </div>
+                )}
                 
-                <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
-                  <CheckCircle2 className="size-5 shrink-0" />
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 text-sm text-foreground">
+                  {activeBreach ? (
+                    <AlertTriangle className="size-5 shrink-0 text-red-500" />
+                  ) : (
+                    <CheckCircle2 className="size-5 shrink-0 text-primary" />
+                  )}
                   <div>
-                    <span className="font-semibold">Physics Valid: {results.physics_valid ? "Yes" : "No"}</span>
-                    <span className="ml-2 text-primary/80">(cooling rate {results.cooling_rate ?? "--"}°C/sec)</span>
+                    <span className="font-semibold text-foreground">
+                      Physics Valid: {results.physics_valid ? "Yes" : "No"}
+                      {activeBreach && (
+                        <span className="ml-1.5 font-normal text-muted-foreground">
+                          (Operational Safety Threshold <span className="font-bold text-red-500">Breached</span>)
+                        </span>
+                      )}
+                    </span>
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">
+                      (cooling rate {results.cooling_rate ?? "--"}°C/sec)
+                    </span>
                   </div>
                 </div>
 
-                <div className="rounded-lg bg-secondary/50 p-4 text-sm">
-                  <span className="font-semibold">Recommendation:</span> {results.recommendation}
+                <div className="rounded-lg bg-secondary/50 p-4 text-sm text-foreground">
+                  <span className="font-semibold text-foreground">Recommendation:</span>{" "}
+                  {activeBreach ? (
+                    <span className="text-foreground">
+                      Revise Parameter — <span className="font-bold text-red-500 uppercase">{activeBreach.level}</span> ({activeBreach.trigger}). {activeBreach.message}
+                    </span>
+                  ) : (
+                    <span className="text-foreground">{results.recommendation}</span>
+                  )}
                 </div></>}
-
-                <div className="flex gap-3 pt-2">
-                  <button className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 cursor-pointer">
-                    <CheckCircle2 className="size-4" /> Apply Change
-                  </button>
-                  <button className="flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-background py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent cursor-pointer">
-                    <Save className="size-4" /> Save Scenario
-                  </button>
-                </div>
               </motion.div>
             ) : (
               <div className="flex h-[200px] flex-col items-center justify-center text-muted-foreground">
@@ -325,7 +523,11 @@ function PINNPage() {
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setActiveTwin(t)}
+                      onClick={() => {
+                        setActiveTwin(t);
+                        setResults(null);
+                        setSimulatedParams(null);
+                      }}
                       className={cn(
                         "flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors cursor-pointer",
                         isActive
@@ -355,21 +557,45 @@ function PINNPage() {
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/50 px-4 py-2.5 font-mono text-xs text-muted-foreground">
               {activeTwin === "melting" && (
                 <>
-                  <span>● Setpoint: <strong className="text-foreground">{setpoint}°C</strong></span>
+                  <span>
+                    ● Setpoint:{" "}
+                    <strong className="text-foreground">
+                      {setpoint}°C
+                      {resultsBreach && simulatedParams?.twin === "melting" ? (
+                        <span className="font-bold text-red-500 ml-1">[{resultsBreach.trigger}]</span>
+                      ) : null}
+                    </strong>
+                  </span>
                   <span>● Live Temp: <strong className="text-foreground">{melting ? `${Number(melting["melt_temp"] ?? 0).toFixed(0)}°C` : "--"}</strong></span>
                   <span>● Cooling: <strong className="text-foreground">{results?.cooling_rate != null ? `${results.cooling_rate}°C/s` : "6.2°C/s"}</strong></span>
                 </>
               )}
               {activeTwin === "molding" && (
                 <>
-                  <span>● Simulated Moisture: <strong className="text-foreground">{moisture}%</strong></span>
+                  <span>
+                    ● Simulated Moisture:{" "}
+                    <strong className="text-foreground">
+                      {moisture}%
+                      {resultsBreach && simulatedParams?.twin === "molding" ? (
+                        <span className="font-bold text-red-500 ml-1">[{resultsBreach.trigger}]</span>
+                      ) : null}
+                    </strong>
+                  </span>
                   <span>● Permeability: <strong className="text-foreground">{molding ? `${Number(molding["permeability"] ?? 118).toFixed(0)} norm` : "118 norm"}</strong></span>
                   <span>● Compactability: <strong className="text-foreground">{molding ? `${Number(molding["compactability"] ?? 44).toFixed(0)}%` : "44%"}</strong></span>
                 </>
               )}
               {activeTwin === "pouring" && (
                 <>
-                  <span>● Simulated Speed: <strong className="text-foreground">{speed} m/s</strong></span>
+                  <span>
+                    ● Simulated Speed:{" "}
+                    <strong className="text-foreground">
+                      {speed} m/s
+                      {resultsBreach && simulatedParams?.twin === "pouring" ? (
+                        <span className="font-bold text-red-500 ml-1">[{resultsBreach.trigger}]</span>
+                      ) : null}
+                    </strong>
+                  </span>
                   <span>● Ladle Fill: <strong className="text-foreground">{pouring ? `${Number(pouring["ladle_fill_pct"] ?? 88).toFixed(0)}%` : "88%"}</strong></span>
                   <span>● Pre-Pour Risk: <strong className="text-foreground">{results?.risk != null ? `${(results.risk * 100).toFixed(2)}%` : "12.00%"}</strong></span>
                 </>
