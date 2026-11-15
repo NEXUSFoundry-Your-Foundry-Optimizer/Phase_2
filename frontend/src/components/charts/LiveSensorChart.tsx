@@ -36,8 +36,27 @@ export function LiveSensorChart({ twin }: { twin: TwinId }) {
   const meta = TWINS[twin];
   const { history, error } = useLiveTwin(twin);
 
-  // Assign each series its own scale so every trace keeps its true unit.
+  // Group series by their axis type: percent-series share one axis [0,100];
+  // non-percent series each get their own auto-scaled axis.
+  const allPercent = meta.series.every((s) => s.percent);
   const axisIds = ["a", "b", "c"] as const;
+
+  // Map each series index → axis id.
+  // If all series are percent we collapse to a single shared left axis "a".
+  const seriesAxisId = meta.series.map((s, i) =>
+    allPercent ? "a" : (axisIds[i] ?? "c")
+  );
+
+  // Deduplicate axes to render.
+  const axesToRender = allPercent
+    ? [{ id: "a", percent: true, unit: "%", orientation: "left" as const }]
+    : meta.series.map((s, i) => ({
+        id: axisIds[i] ?? "c",
+        percent: !!s.percent,
+        unit: s.unit,
+        orientation: i === 1 ? ("right" as const) : ("left" as const),
+        hide: i === 2,
+      }));
 
   return (
     <div className="h-[300px] w-full">
@@ -62,22 +81,21 @@ export function LiveSensorChart({ twin }: { twin: TwinId }) {
             axisLine={false}
             minTickGap={28}
           />
-          {/* Primary scale (°C / % / …) on the left, secondary on the right. */}
-          {meta.series.map((s, i) => {
-            const id = axisIds[i] ?? "c";
-            const domain: [number | string, number | string] = s.percent ? [0, 100] : ["auto", "auto"];
+          {/* Render deduplicated Y-axes */}
+          {axesToRender.map((ax) => {
+            const domain: [number | string, number | string] = ax.percent ? [0, 100] : ["auto", "auto"];
             return (
               <YAxis
-                key={id}
-                yAxisId={id}
+                key={ax.id}
+                yAxisId={ax.id}
                 domain={domain}
-                orientation={i === 1 ? "right" : "left"}
-                hide={i === 2}
-                {...(s.unit ? { label: axisUnitLabel(s.unit) } : {})}
+                orientation={ax.orientation}
+                hide={("hide" in ax) ? ax.hide : false}
+                {...(ax.unit ? { label: axisUnitLabel(ax.unit) } : {})}
                 tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
                 tickLine={false}
                 axisLine={false}
-                width={i === 1 ? 42 : 46}
+                width={ax.orientation === "right" ? 42 : 46}
               />
             );
           })}
@@ -96,7 +114,7 @@ export function LiveSensorChart({ twin }: { twin: TwinId }) {
           {meta.series.map((s, i) => (
             <Area
               key={s.key}
-              yAxisId={axisIds[i] ?? "c"}
+              yAxisId={seriesAxisId[i]}
               type="monotone"
               dataKey={s.key}
               name={seriesName(s)}

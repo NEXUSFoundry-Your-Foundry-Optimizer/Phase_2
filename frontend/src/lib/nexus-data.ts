@@ -86,9 +86,8 @@ export const TWINS: Record<TwinId, TwinMeta> = {
       { key: "inspection_result", label: "Result", unit: "" },
     ],
     series: [
-      { key: "temp", field: "defect_risk", label: "Defect risk", unit: "%", color: "var(--color-chart-1)", percent: true, fallback: 0.02 },
-      { key: "power", field: "quality_score", label: "Quality score", unit: "%", color: "var(--color-chart-2)", percent: true, fallback: 0.98 },
-      { key: "vibration", field: "severity", label: "Severity", unit: "", color: "var(--color-chart-3)", fallback: 0 },
+      { key: "temp", field: "defect_risk", label: "Defect risk (%)", unit: "%", color: "var(--color-chart-1)", percent: true, fallback: 0.02 },
+      { key: "power", field: "quality_score", label: "Quality score (%)", unit: "%", color: "var(--color-chart-2)", percent: true, fallback: 0.98 },
     ],
   },
 };
