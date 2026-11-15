@@ -45,6 +45,7 @@ venv/
 *.zip
 exported_screenshots/
 frontend/assets/
+temp_images/
 
 
 
