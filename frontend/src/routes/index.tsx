@@ -156,7 +156,7 @@ export function Landing() {
           </motion.p>
 
           <h1 className="mt-6 max-w-5xl text-[clamp(2.6rem,7vw,5.4rem)] font-medium leading-[1.05] tracking-tight text-white">
-            <RevealWords text="AI-powered digital twins for" />{" "}
+            <RevealWords text="Digital twins for" />{" "}
             <span className="text-[#FF7A00]">
               <RevealWords text="foundry operations" />
             </span>
