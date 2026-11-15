@@ -87,6 +87,14 @@ export function Navbar() {
         <div className="hidden items-center gap-7 lg:flex">
           <Dropdown label="Twins" items={twinLinks} />
           <Link
+            to="/factory"
+            className="text-sm font-medium text-emerald-400 transition-colors hover:text-emerald-300 flex items-center gap-1"
+            activeProps={{ className: "text-emerald-300 font-bold" }}
+          >
+            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+            Factory Simulator
+          </Link>
+          <Link
             to="/live-workflow"
             className="text-sm font-medium text-amber-400 transition-colors hover:text-amber-300 flex items-center gap-1"
             activeProps={{ className: "text-amber-300 font-bold" }}
@@ -154,6 +162,9 @@ export function Navbar() {
             ))}
           </div>
           <div className="grid gap-1">
+            <Link to="/factory" className="py-1.5 text-sm font-semibold text-emerald-400">
+              🏭 Factory Simulator
+            </Link>
             <Link to="/live-workflow" className="py-1.5 text-sm font-semibold text-amber-400">
               ⚡ Live Workflow
             </Link>
