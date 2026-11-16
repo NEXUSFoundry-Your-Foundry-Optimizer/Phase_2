@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: nexus-foundry-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+
+  - type: web
+    name: nexus-foundry-frontend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerContext: ./frontend
+    dockerfilePath: ./frontend/Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: nexus-foundry-backend
+          envVarKey: RENDER_EXTERNAL_URL

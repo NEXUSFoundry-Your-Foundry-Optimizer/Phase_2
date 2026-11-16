@@ -18,7 +18,13 @@ export interface LivePoint {
 export function formatLiveValue(key: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "--";
   if (typeof value === "number") {
-    if (key === "pre_pour_risk" || key === "defect_probability" || key === "risk_score" || key === "defect_risk" || key === "quality_score") {
+    if (
+      key === "pre_pour_risk" ||
+      key === "defect_probability" ||
+      key === "risk_score" ||
+      key === "defect_risk" ||
+      key === "quality_score"
+    ) {
       const val = value <= 1.0 ? value * 100 : value;
       return val.toFixed(2);
     }
@@ -30,11 +36,17 @@ export function formatLiveValue(key: string, value: unknown): string {
 
 export const API_URL = (
   import.meta.env["VITE_API_URL"] ||
-  (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
-    ? "https://nexus-foundry-5zga.onrender.com"
+  (typeof window !== "undefined" &&
+  window.location.hostname !== "localhost" &&
+  window.location.hostname !== "127.0.0.1"
+    ? window.location.origin
     : "http://localhost:8000")
 ).replace(/\/$/, "");
-const WS_URL = API_URL.replace(/^http/, "ws");
+const WS_URL = API_URL
+  ? API_URL.replace(/^http/, "ws")
+  : typeof window !== "undefined"
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+    : "ws://localhost:8000";
 
 async function getJson<T>(path: string): Promise<T> {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
@@ -65,7 +77,12 @@ function toPoint(twin: TwinId, state: LiveState, timeLabel?: string): LivePoint 
     let value = Number(state[series.field] ?? series.fallback ?? 0);
     if (!Number.isFinite(value)) value = 0;
     if (series.percent) value *= 100;
-    const decimals = series.unit === "°C" || series.unit === "kW" || series.unit === "kPa" ? 1 : series.unit === "norm" ? 2 : 3;
+    const decimals =
+      series.unit === "°C" || series.unit === "kW" || series.unit === "kPa"
+        ? 1
+        : series.unit === "norm"
+          ? 2
+          : 3;
     point[slot] = Number(value.toFixed(decimals));
   });
   return point;
@@ -92,13 +109,17 @@ export function useLiveTwin(twin: TwinId) {
     // Fetch initial state & history series
     Promise.all([
       getJson<LiveState>(`/api/v1/digital-twins/${twin}/state`),
-      getJson<{ series: LiveState[] }>(`/api/v1/sensors/series/${twin}?points=40`).catch(() => ({ series: [] })),
+      getJson<{ series: LiveState[] }>(`/api/v1/sensors/series/${twin}?points=40`).catch(() => ({
+        series: [],
+      })),
     ])
       .then(([initial, response]) => {
         if (!active) return;
         setState(initial);
         const rawPoints = response.series.length > 0 ? response.series : [initial];
-        const initialHistory = rawPoints.map((point, idx) => toPoint(twin, point, formatElapsed(idx * 2)));
+        const initialHistory = rawPoints.map((point, idx) =>
+          toPoint(twin, point, formatElapsed(idx * 2)),
+        );
         elapsedSecondsRef.current = rawPoints.length * 2;
         setHistory(initialHistory);
       })
@@ -120,7 +141,11 @@ export function useLiveTwin(twin: TwinId) {
       socket.onmessage = (message) => {
         if (!active) return;
         try {
-          const payload = JSON.parse(message.data) as { type?: string; twin?: TwinId; state?: LiveState };
+          const payload = JSON.parse(message.data) as {
+            type?: string;
+            twin?: TwinId;
+            state?: LiveState;
+          };
           if (payload.type === "digital_twin_update" && payload.twin === twin && payload.state) {
             setState(payload.state);
             const currentSeconds = elapsedSecondsRef.current;
@@ -175,9 +200,15 @@ export function useLiveDashboard() {
     socket.onmessage = (message) => {
       if (!active) return;
       try {
-        const payload = JSON.parse(message.data) as { type?: string; twin?: TwinId; state?: LiveState };
+        const payload = JSON.parse(message.data) as {
+          type?: string;
+          twin?: TwinId;
+          state?: LiveState;
+        };
         if (payload.type === "digital_twin_update" && payload.twin && payload.state) {
-          setData((previous) => (previous ? { twins: { ...previous.twins, [payload.twin!]: payload.state! } } : previous));
+          setData((previous) =>
+            previous ? { twins: { ...previous.twins, [payload.twin!]: payload.state! } } : previous,
+          );
         }
       } catch {
         // Ignore invalid frame

@@ -104,6 +104,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - PORT=8000
       - MQTT_BROKER_HOST=mosquitto
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - POSTGRES_HOST=postgres

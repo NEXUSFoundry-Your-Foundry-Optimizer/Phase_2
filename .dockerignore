@@ -1,0 +1,12 @@
+.git
+.tools
+frontend
+docs
+scripts
+src
+temp_images
+*.log
+*.md
+*.tex
+**/__pycache__
+**/*.py[cod]

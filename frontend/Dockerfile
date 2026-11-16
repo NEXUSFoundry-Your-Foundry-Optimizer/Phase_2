@@ -3,9 +3,8 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Same-origin demo build: empty VITE_API_URL makes live-api call the serving
-# origin directly; nginx.conf proxies /api and /ws to the backend container.
-ENV VITE_API_URL=""
+# A relative API base keeps REST and WebSocket traffic on this Nginx origin.
+ENV VITE_API_URL="/"
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
@@ -16,7 +15,10 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV BACKEND_URL="http://backend:8000"
+ENV NGINX_ENVSUBST_FILTER="^BACKEND_URL$"
+
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80

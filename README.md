@@ -210,6 +210,20 @@ To stop the stack:
 docker compose down
 ```
 
+### Deploying to Render (free tier)
+
+The repository includes a `render.yaml` Blueprint for two free Docker web
+services: the FastAPI backend and the Nginx frontend. In Render, create a
+Blueprint from this repository and apply `render.yaml`; Render generates the
+backend `SECRET_KEY`. The frontend proxies `/api` and `/ws` to the backend.
+Render Free services cannot receive private-network traffic, so this Blueprint
+uses the backend's public HTTPS address; `BACKEND_URL` remains configurable
+(paid backends can use their internal address). The backend can start without
+Kafka, MQTT, PostgreSQL, InfluxDB, or Redis and uses its existing in-memory
+fallbacks; this Blueprint does not create external datastores. Free services
+may sleep when idle, and in-memory state is lost when the backend restarts, so
+this setup is for demos, not durable production workloads.
+
 ---
 
 ## 💻 Local Development Setup
