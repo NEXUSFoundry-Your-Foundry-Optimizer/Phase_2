@@ -42,11 +42,12 @@ export const API_URL = (
     ? window.location.origin
     : "http://localhost:8000")
 ).replace(/\/$/, "");
-const WS_URL = API_URL
-  ? API_URL.replace(/^http/, "ws")
-  : typeof window !== "undefined"
-    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
-    : "ws://localhost:8000";
+const WS_URL = (() => {
+  const url = new URL(API_URL);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  if (url.hostname === "localhost") url.hostname = "127.0.0.1";
+  return `${url.origin}${url.pathname.replace(/\/$/, "")}`;
+})();
 
 async function getJson<T>(path: string): Promise<T> {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
