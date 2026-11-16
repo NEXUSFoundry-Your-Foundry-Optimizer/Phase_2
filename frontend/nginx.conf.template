@@ -28,6 +28,10 @@ server {
         proxy_send_timeout 3600s;
     }
 
+    location ^~ /assets/ {
+        try_files $uri =404;
+    }
+
     # TanStack Start / SPA client-side routing fallback
     location / {
         try_files $uri $uri/index.html /index.html;
