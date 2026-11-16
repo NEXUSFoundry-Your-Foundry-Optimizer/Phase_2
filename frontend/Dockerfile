@@ -7,6 +7,7 @@ WORKDIR /app
 ENV VITE_API_URL="/"
 
 COPY package*.json ./
+COPY scripts/ ./scripts/
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 COPY . .
